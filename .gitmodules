@@ -1,0 +1,3 @@
+[submodule "boring"]
+	path = boring
+	url = https://github.com/cptx032/boring.git
