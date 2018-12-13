@@ -13,7 +13,8 @@ import numpy
 import pyglet
 from boring import draw
 from boring.window import SubWindow, Window
-from boring.widgets import Label, ExtendedCanvas as Canvas
+from boring.widgets import Label, ExtendedCanvas as Canvas, Button, Entry
+from boring.dialog import DefaultDialog
 
 
 def lerp(a, b, x):
@@ -25,10 +26,55 @@ SELECT_COLOR = u'#1e90ff'
 SELECT_MARK_PADDING_PX = 15
 SELECT_LINE_WIDTH = 3
 
+TRACK_LABEL_FONT = ('TkDefaultFont', 8)
+
 # fixme > read pallete from configuration file
 COLORS = [
     '#00aacc', '#CD1B00', '#00CD74', '#CD8900', '#CD0066'
 ]
+
+
+class DefaultDialogButton(Button):
+    def __init__(self, *args, **kwargs):
+        Button.__init__(self, *args, **kwargs)
+        self.configure(
+            relief='flat',
+            bg=self.master['bg'],
+            highlightthickness=1,
+            highlightbackground='#00aacc',
+            fg='#999'
+        )
+
+
+class RenameSoundFragmentDialog(DefaultDialog):
+    def __init__(self, *args, **kwargs):
+        self.track_label = kwargs.pop('track_label', '')
+        kwargs.update(button_class=DefaultDialogButton)
+        DefaultDialog.__init__(self, *args, **kwargs)
+
+    def body(self, parent):
+        self._entry = Entry(
+            parent,
+            fg='#333',
+            text='Rename',
+            relief='flat',
+            bd=10,
+            insertwidth=1
+        )
+        self._entry.grid(pady=5, padx=5)
+
+        # for some reason that I can't understand
+        # even creating a new instance of Entry it will
+        # 'insert' a new text to entry, so, every time you
+        # rename, the entry will appending old track labels
+        # the solution that I found was remove the content
+        # before fill the text
+        self._entry.delete(0, 'end')
+        self._entry.insert('0', self.track_label)
+        return self._entry
+
+    def apply(self):
+        self.result = self._entry.get()
 
 
 class JupiterAboutWindow(SubWindow):
@@ -236,7 +282,8 @@ class SoundFragment(draw.RectangleDraw):
             self.y - (self.button_height / 2),
             anchor='w',
             text=kwargs.pop('track_label', u'TRACK LABEL'),
-            fill='#aaa'
+            fill='#aaa',
+            font=TRACK_LABEL_FONT
         ).bind('<1>', self.mark_as_selected, '+')
         self.calculates_sound_lines()
         self.sound_line = draw.LineDraw(
@@ -422,7 +469,9 @@ class MainJupiterWindow(Window):
             self.width - 20,
             20, text=u'\n\n'.join([
                 'o - open wav',
-                'a - about'
+                'b - about',
+                'a - select all',
+                'r - rename sound'
             ]),
             anchor='ne', fill='#999'
         )
@@ -456,15 +505,32 @@ class MainJupiterWindow(Window):
 
         self.bind('<Up>', self.offset_positive_y_sound_fragments, '+')
         self.bind('<Down>', self.offset_negative_y_sound_fragments, '+')
-        self.bind('<Control-a>', self.select_all_sound_fragments, '+')
+        self.bind('<a>', self.select_all_sound_fragments, '+')
+        self.bind('<r>', self.rename_selected_sound_fragment, '+')
+        self.bind('<b>', self.show_about, '+')
 
         self.sounds = []
-        self.configure_binds()
         self.main_canvas.focus_force()
 
+    def rename_selected_sound_fragment(self, event=None):
+        selected = self.get_selected_sound_fragments()
+        if len(selected) > 1:
+            return
+        s_fragment = selected[0]
+        name = RenameSoundFragmentDialog(
+            self,
+            u'Rename {}'.format(s_fragment.track_label.text),
+            track_label=s_fragment.track_label.text
+        ).result
+        if name:
+            s_fragment.track_label.text = name
+
     def select_all_sound_fragments(self, event=None):
-        for sound in self.sounds:
-            sound.selected = True
+        if len(self.get_selected_sound_fragments()) == len(self.sounds):
+            self.desselect_sound_fragments()
+        else:
+            for sound in self.sounds:
+                sound.selected = True
 
     def offset_positive_y_sound_fragments(self, event=None):
         for sound in self.get_selected_sound_fragments():
@@ -544,9 +610,6 @@ class MainJupiterWindow(Window):
             if self.sec_px < 5:
                 self.sec_px = 5
 
-    def configure_binds(self):
-        self.bind('<a>', self.show_about, '+')
-
     def show_about(self, event=None):
         JupiterAboutWindow(self)
 
@@ -598,7 +661,6 @@ if __name__ == '__main__':
 # o grid no fundo deve ser o metronomo
 # lock fragments
 # save
-# apertar F2 para alterar o nome da track selecionada
 # ctrl+c ctrl+v
 # select multiple + move (falta na horizontal)
 # editar samples
