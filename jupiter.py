@@ -8,13 +8,19 @@ import tkFileDialog
 import uuid
 import time
 import threading
+import audioop
+import math
 
 import numpy
-import pyglet
+import pyaudio
+import wave
 from boring import draw
 from boring.window import SubWindow, Window
 from boring.widgets import Label, ExtendedCanvas as Canvas, Button, Entry
 from boring.dialog import DefaultDialog
+
+
+PYAUDIO = pyaudio.PyAudio()
 
 
 def lerp(a, b, x):
@@ -180,31 +186,54 @@ class JupiterSound(object):
 
     def __init__(self, path):
         self.path = path
-        self.media = pyglet.media.load(self.path)
+        self.media = wave.open(self.path, u'rb')
         self.data = self.get_data()
-        self.player = pyglet.media.Player()
-        self.player.queue(self.media)
-        self.duration = self.media.duration
-        self.length = len(self.data)
+        self.duration = self.media.getnframes() / float(
+            self.media.getframerate())
+        self.playing = False
+        self.volume = 1.0
+        self.decibel = 0
 
     def get_data(self):
-        """Return raw audio data."""
-        raw_data = self.media.get_audio_data(JupiterSound.CHUNK_SIZE).data
-        last_data = raw_data
-        while last_data:
-            last_data = self.media.get_audio_data(JupiterSound.CHUNK_SIZE)
-            if last_data:
-                raw_data += last_data.data
-        return numpy.fromstring(raw_data, 'Int16')
+        data = self.media.readframes(JupiterSound.CHUNK_SIZE)
+        _d = data
+        while _d:
+            _d = self.media.readframes(JupiterSound.CHUNK_SIZE)
+            data += _d
+        return numpy.fromstring(data, 'Int16')
 
     def play(self):
-        if not self.player.playing:
-            self.player.seek(0)
-            self.player.play()
+        if self.playing:
+            return
+
+        self.media.rewind()
+        self.playing = True
+
+        stream = PYAUDIO.open(
+            format=PYAUDIO.get_format_from_width(self.media.getsampwidth()),
+            channels=self.media.getnchannels(),
+            rate=self.media.getframerate(),
+            output=True
+        )
+        import struct
+
+        def callback():
+            data = self.media.readframes(JupiterSound.CHUNK_SIZE)
+            while self.playing and data:
+                data = numpy.fromstring(data, 'Int16') * self.volume
+                data = struct.pack('h' * len(data), *data)
+
+                stream.write(data)
+                data = self.media.readframes(JupiterSound.CHUNK_SIZE)
+                self.decibel = 20 * math.log10(audioop.rms(data, 2))
+            stream.stop_stream()
+            stream.close()
+            self.playing = False
+
+        threading.Thread(target=callback).start()
 
     def stop(self):
-        self.player.seek(0)
-        self.player.pause()
+        self.playing = False
 
     def __del__(self):
         self.stop()
@@ -501,7 +530,7 @@ class MainJupiterWindow(Window):
         )
         self.playing = False
         self.start_play = None
-        self.bind('<p>', self.toggle_play_pause, '+')
+        self.bind('<space>', self.toggle_play_pause, '+')
 
         self.bind('<Up>', self.offset_positive_y_sound_fragments, '+')
         self.bind('<Down>', self.offset_negative_y_sound_fragments, '+')
@@ -589,22 +618,32 @@ class MainJupiterWindow(Window):
 
     def mouse_scroll_up_handler(self, event=None):
         if self.kmap.get(u'Shift_L', False):
+            self.start_line_left_padding += 5
+            self.start_line.coords = [
+                self.start_line_left_padding, 0, self.start_line_left_padding,
+                self.height
+            ]
             for i in self.sounds:
-                i.height += 5
-                i.calculates_sound_lines()
+                # i.height += 5
+                # i.calculates_sound_lines()
                 i.update_component()
-        else:
+        elif self.kmap.get('Control_L'):
             self.sec_px += 1
 
     def mouse_scroll_down_handler(self, event=None):
         if self.kmap.get(u'Shift_L', False):
+            self.start_line_left_padding -= 5
+            self.start_line.coords = [
+                self.start_line_left_padding, 0, self.start_line_left_padding,
+                self.height
+            ]
             for i in self.sounds:
-                i.height -= 5
-                if i.height <= 5:
-                    i.height = 5
-                i.calculates_sound_lines()
+                # i.height -= 5
+                # if i.height <= 5:
+                #     i.height = 5
+                # i.calculates_sound_lines()
                 i.update_component()
-        else:
+        elif self.kmap.get('Control_L'):
             self.sec_px -= 1
             # fixme: put this value in a configuration file?
             if self.sec_px < 5:
@@ -641,7 +680,10 @@ class MainJupiterWindow(Window):
 
 if __name__ == '__main__':
     top = MainJupiterWindow()
+    # import threading
+    # threading.Thread(target=pyglet.app.run).start()
     top.mainloop()
+    PYAUDIO.terminate()
 
 '''
 {
@@ -668,19 +710,30 @@ if __name__ == '__main__':
 # mutar e desmutar por cor
 # ao fechar repentinamento o arquivo, estoura um erro
 # m -> muta tudo que está selecionado
+# ao fechar tela dar um stop em todos os fragments
 # undo/redo
 
 # como os sounds estao sendo desenhados em funcao do padding_left
 # tlvz nem precise fazer scroll em todo mundo, mas sim só mudar o paddingleft
+# a leitura não ser mais do .media, assim o stream precisa ser direto de um
+# stringio pra poder fazer edição dos samples sem salvar os arquivos em outros
+# waves
 
 # possibilidade de adicionar bookmarks em trechos
     # os bookmarks podem ser um ponto no tempo, fixos, ou podem ser relativos
     # aos sound fragments
+# o play-line só aparece quando houver som tocando
 
 # bug audacity, apertar seta cima pra ir pra track de cima
 # mas se apertar Shift + R ele grava na anterior
 # ao solar uma track e apertar shift+r ele toca as que estao mudas
 # apertar F2 e alterar o nome da track
+# Shift + ScrollWheel -> para fazer scroll como o audacity
+# apertar Tab para alternar de uma base para outra
+# permitir alterar o volume de uma parte especifica
+
+# permitir copiar um fragment e as alterações de volume que
+# se fizerem se repete a nao ser que se queira "desconectar"
 
 # o atalho para desmutar tudo nao funciona (Ctrl + Shift + U)
 # psicopato, o pato psicopata
