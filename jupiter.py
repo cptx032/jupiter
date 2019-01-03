@@ -3,24 +3,25 @@
 """Jupiter audio sequencer."""
 
 import os
-import Tkinter as tk
-import tkFileDialog
 import uuid
 import time
 import threading
 import audioop
 import math
+import struct
+import wave
 
 import numpy
 import pyaudio
-import wave
 from boring import draw
-from boring.window import SubWindow, Window
+from boring.window import SubWindow, Window, import_tkinter, import_filedialog
 from boring.widgets import Label, ExtendedCanvas as Canvas, Button, Entry
 from boring.dialog import DefaultDialog
 
 
 PYAUDIO = pyaudio.PyAudio()
+tk = import_tkinter()
+filedialog = import_filedialog()
 
 
 def lerp(a, b, x):
@@ -202,9 +203,10 @@ class JupiterSound(object):
             data += _d
         return numpy.fromstring(data, 'Int16')
 
-    def play(self):
+    def play(self, seek=0.0):
         if self.playing:
             return
+
 
         self.media.rewind()
         self.playing = True
@@ -215,12 +217,15 @@ class JupiterSound(object):
             rate=self.media.getframerate(),
             output=True
         )
-        import struct
 
         def callback():
+            # reading some first bytes to conform 'seek'
+            self.media.readframes(int(self.media.getframerate() * seek))
+
             data = self.media.readframes(JupiterSound.CHUNK_SIZE)
             while self.playing and data:
                 data = numpy.fromstring(data, 'Int16') * self.volume
+                # python3 error
                 data = struct.pack('h' * len(data), *data)
 
                 stream.write(data)
@@ -440,8 +445,8 @@ class SoundFragment(draw.RectangleDraw):
         self.start = distance / self.main_window.sec_px
         self.update_component(dx, dy)
 
-    def play(self):
-        self.sound.play()
+    def play(self, seek=0.0):
+        self.sound.play(seek)
 
     def stop(self):
         self.sound.stop()
@@ -645,10 +650,17 @@ class MainJupiterWindow(Window):
             minutes_playing, secs_playing
         )
 
+        actual_seek = self.start_seek + duration
+        # there is a better way to avoid loop all fragments?
         for sound in self.sounds:
-            if (self.start_seek + duration) >= sound.start:
+            interval = [
+                sound.start,
+                sound.start + sound.sound.duration
+            ]
+            if actual_seek >= interval[0] and actual_seek <= interval[1]:
+                seek_to_play = actual_seek - sound.start
                 if self.playing:
-                    sound.play()
+                    sound.play(seek_to_play)
         if self.playing:
             self.after(1, self.update_play_line)
         else:
@@ -718,7 +730,7 @@ class MainJupiterWindow(Window):
         self.main_canvas.update_idletasks()
 
     def open_file(self, event=None):
-        filenames = tkFileDialog.askopenfilenames(
+        filenames = filedialog.askopenfilenames(
             filetypes=(
                 ('WAV Files', '*.wav'),
             )
