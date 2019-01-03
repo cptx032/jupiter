@@ -500,7 +500,8 @@ class MainJupiterWindow(Window):
                 'o - open wav',
                 'b - about',
                 'a - select all',
-                'r - rename sound'
+                'F2 - rename sound',
+                'space - play/stop',
             ]),
             anchor='ne', fill='#999'
         )
@@ -521,12 +522,9 @@ class MainJupiterWindow(Window):
 
         self.play_line = draw.LineDraw(
             self.main_canvas,
-            [
-                self.start_line_left_padding, 0, self.start_line_left_padding,
-                self.height
-            ],
-            fill='#555',
-            width=1
+            [0, 0, 0, 0],
+            fill='#2ecc71',
+            width=5
         )
         self.playing = False
         self.start_play = None
@@ -535,7 +533,7 @@ class MainJupiterWindow(Window):
         self.bind('<Up>', self.offset_positive_y_sound_fragments, '+')
         self.bind('<Down>', self.offset_negative_y_sound_fragments, '+')
         self.bind('<a>', self.select_all_sound_fragments, '+')
-        self.bind('<r>', self.rename_selected_sound_fragment, '+')
+        self.bind('<F2>', self.rename_selected_sound_fragment, '+')
         self.bind('<b>', self.show_about, '+')
 
         self.sounds = []
@@ -603,6 +601,8 @@ class MainJupiterWindow(Window):
                     sound.play()
         if self.playing:
             self.after(1, self.update_play_line)
+        else:
+            self.play_line.coords = [0, 0, 0, 0]
 
     @property
     def sec_px(self):
@@ -713,8 +713,6 @@ if __name__ == '__main__':
 # ao fechar tela dar um stop em todos os fragments
 # undo/redo
 
-# como os sounds estao sendo desenhados em funcao do padding_left
-# tlvz nem precise fazer scroll em todo mundo, mas sim só mudar o paddingleft
 # a leitura não ser mais do .media, assim o stream precisa ser direto de um
 # stringio pra poder fazer edição dos samples sem salvar os arquivos em outros
 # waves
