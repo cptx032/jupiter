@@ -260,7 +260,7 @@ class SoundFragment(draw.RectangleDraw):
         draw.RectangleDraw.__init__(
             self, main_window.main_canvas, self.get_x(), y,
             self.get_width(),
-            kwargs.pop('height', 25),
+            kwargs.pop('height', 50),
             fill=_fill,
             outline=_fill
         )
@@ -457,6 +457,7 @@ class MainJupiterWindow(Window):
         self.enable_kmap()
         self.caption = 'Jupiter'
         self.maximize()
+        # self.geometry(u'800x600')
         self.update_idletasks()
 
         self.main_canvas = Canvas(
@@ -478,6 +479,7 @@ class MainJupiterWindow(Window):
             stipple='gray12'
         )
         self.background.bind('<1>', self.desselect_sound_fragments, '+')
+        self.background.bind('<1>', self.set_cursor_position, '+')
 
         self.status_text = draw.TextDraw(
             self.main_canvas,
@@ -493,6 +495,14 @@ class MainJupiterWindow(Window):
             anchor='se', fill='#999',
             font=('TkDefaultFont', 10, 'bold')
         )
+        self.play_position_label = draw.TextDraw(
+            self.main_canvas,
+            20,
+            self.height - 20,
+            text=u'0min 0sec',
+            anchor='sw', fill='#999',
+            font=('TkDefaultFont', 10, 'bold')
+        )
 
         self.main_canvas.create_text(
             self.width - 20,
@@ -500,8 +510,9 @@ class MainJupiterWindow(Window):
                 'o - open wav',
                 'b - about',
                 'a - select all',
-                'F2 - rename sound',
+                'f2 - rename sound',
                 'space - play/stop',
+                'home - set cursor to start position'
             ]),
             anchor='ne', fill='#999'
         )
@@ -526,8 +537,22 @@ class MainJupiterWindow(Window):
             fill='#2ecc71',
             width=5
         )
+        self.cursor_line = draw.LineDraw(
+            self.main_canvas,
+            [
+                self.start_line_left_padding, 0, self.start_line_left_padding,
+                self.height
+            ],
+            fill='#3498db',
+            width=2
+        )
+
         self.playing = False
+        # the point in time that start to play (time of computer)
         self.start_play = None
+        # the point in timeline that start to play (time of music)
+        self.start_seek = None
+
         self.bind('<space>', self.toggle_play_pause, '+')
 
         self.bind('<Up>', self.offset_positive_y_sound_fragments, '+')
@@ -535,9 +560,25 @@ class MainJupiterWindow(Window):
         self.bind('<a>', self.select_all_sound_fragments, '+')
         self.bind('<F2>', self.rename_selected_sound_fragment, '+')
         self.bind('<b>', self.show_about, '+')
+        self.bind('<Home>', self.set_cursos_to_start_position, '+')
 
         self.sounds = []
         self.main_canvas.focus_force()
+
+    def set_cursos_to_start_position(self, event):
+        self.cursor_line.coords = [
+            self.start_line_left_padding, 0,
+            self.start_line_left_padding, self.height
+        ]
+
+    def set_cursor_position(self, event):
+        x = event.x
+        if x < self.start_line_left_padding:
+            x = self.start_line_left_padding
+        self.cursor_line.coords = [
+            x, 0, x,
+            self.height
+        ]
 
     def rename_selected_sound_fragment(self, event=None):
         selected = self.get_selected_sound_fragments()
@@ -580,6 +621,8 @@ class MainJupiterWindow(Window):
                 sound.stop()
         else:
             self.playing = True
+            dx = self.cursor_line.coords[0] - self.start_line_left_padding
+            self.start_seek = dx / float(self.sec_px)
             self.start_play = time.time()
             self.update_play_line()
 
@@ -589,20 +632,28 @@ class MainJupiterWindow(Window):
 
     def update_play_line(self):
         duration = time.time() - self.start_play
-        x = self.start_line_left_padding
+        x = self.start_line_left_padding + (self.start_seek * self.sec_px)
         x += self.sec_px * duration
         self.play_line.coords = [
             x, 0, x, self.height
         ]
 
+        secs_playing = self.start_seek + duration
+        minutes_playing = int(secs_playing / 60.0)
+        secs_playing = secs_playing % 60.0
+        self.play_position_label.text = u'{}min {:.2f}secs'.format(
+            minutes_playing, secs_playing
+        )
+
         for sound in self.sounds:
-            if duration >= sound.start:
+            if (self.start_seek + duration) >= sound.start:
                 if self.playing:
                     sound.play()
         if self.playing:
             self.after(1, self.update_play_line)
         else:
             self.play_line.coords = [0, 0, 0, 0]
+            self.play_position_label.text = '0min 0sec'
 
     @property
     def sec_px(self):
@@ -619,6 +670,10 @@ class MainJupiterWindow(Window):
     def mouse_scroll_up_handler(self, event=None):
         if self.kmap.get(u'Shift_L', False):
             self.start_line_left_padding += 5
+            cursor_x = self.cursor_line.coords[0] + 5
+            self.cursor_line.coords = [
+                cursor_x, 0, cursor_x, self.height
+            ]
             self.start_line.coords = [
                 self.start_line_left_padding, 0, self.start_line_left_padding,
                 self.height
@@ -636,6 +691,11 @@ class MainJupiterWindow(Window):
             self.start_line.coords = [
                 self.start_line_left_padding, 0, self.start_line_left_padding,
                 self.height
+            ]
+
+            cursor_x = self.cursor_line.coords[0] - 5
+            self.cursor_line.coords = [
+                cursor_x, 0, cursor_x, self.height
             ]
             for i in self.sounds:
                 # i.height -= 5
@@ -671,7 +731,7 @@ class MainJupiterWindow(Window):
             sv = SoundFragment(
                 self,
                 JupiterSound(filename),
-                1.0, 25,
+                1.0, 100,
                 track_label=os.path.basename(
                     os.path.splitext(filename)[0]).upper()
             )
@@ -680,8 +740,6 @@ class MainJupiterWindow(Window):
 
 if __name__ == '__main__':
     top = MainJupiterWindow()
-    # import threading
-    # threading.Thread(target=pyglet.app.run).start()
     top.mainloop()
     PYAUDIO.terminate()
 
