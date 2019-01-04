@@ -804,7 +804,7 @@ class MainJupiterWindow(Window):
         JupiterAboutWindow(self)
 
     def set_status(self, text):
-        self.status_text.xy = 20, self.height - 20
+        self.status_text.xy = self.width / 2, self.height - 20
         self.status_text.configure(text=text)
         self.main_canvas.update_idletasks()
 
