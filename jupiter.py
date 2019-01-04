@@ -651,10 +651,34 @@ class MainJupiterWindow(Window):
             if sound_seek > seek:
                 seek = sound_seek
         x = self.start_line_left_padding + (self.sec_px * seek)
+        if x > self.width:
+            # the cursor will be in the end of canvas/window
+            # just padded some pixels
+            pad = 20
+            px = seek * self.sec_px
+            self.set_start_label_to(self.width - pad - px)
+            x = self.start_line_left_padding + (self.sec_px * seek)
         self.cursor_line.coords = [
             x, 0,
             x, self.height
         ]
+
+    def set_start_label_to(self, px):
+        cursor = self.cursor_line.coords[0] - self.start_line_left_padding
+        self.start_line_left_padding = int(px)
+
+        self.start_line.coords = [
+            self.start_line_left_padding, 0,
+            self.start_line_left_padding, self.height
+        ]
+        self.cursor_line.coords = [
+            px + cursor, 0,
+            px + cursor, self.height
+        ]
+        for i in self.sounds:
+            i.update_component()
+        self.bpm_grid.start_px = self.start_line_left_padding
+        self.bpm_grid.draw()
 
     def set_cursor_position(self, event):
         x = event.x
@@ -771,19 +795,7 @@ class MainJupiterWindow(Window):
 
     def mouse_scroll_up_handler(self, event=None):
         if self.kmap.get(u'Shift_L', False):
-            self.start_line_left_padding += 5
-            cursor_x = self.cursor_line.coords[0] + 5
-            self.cursor_line.coords = [
-                cursor_x, 0, cursor_x, self.height
-            ]
-            self.start_line.coords = [
-                self.start_line_left_padding, 0, self.start_line_left_padding,
-                self.height
-            ]
-            for i in self.sounds:
-                # i.height += 5
-                # i.calculates_sound_lines()
-                i.update_component()
+            self.set_start_label_to(self.start_line_left_padding + 5)
         elif self.kmap.get('Control_L'):
             self.sec_px += 1
             self.bpm_grid.sec_px = self.sec_px
@@ -791,22 +803,7 @@ class MainJupiterWindow(Window):
 
     def mouse_scroll_down_handler(self, event=None):
         if self.kmap.get(u'Shift_L', False):
-            self.start_line_left_padding -= 5
-            self.start_line.coords = [
-                self.start_line_left_padding, 0, self.start_line_left_padding,
-                self.height
-            ]
-
-            cursor_x = self.cursor_line.coords[0] - 5
-            self.cursor_line.coords = [
-                cursor_x, 0, cursor_x, self.height
-            ]
-            for i in self.sounds:
-                # i.height -= 5
-                # if i.height <= 5:
-                #     i.height = 5
-                # i.calculates_sound_lines()
-                i.update_component()
+            self.set_start_label_to(self.start_line_left_padding - 5)
         elif self.kmap.get('Control_L'):
             self.sec_px -= 1
             # fixme: put this value in a configuration file?
