@@ -223,6 +223,8 @@ class BPMGrid(object):
         self.canvas.delete(self.tag)
         for x in xrange(
                 self.start_px, self.canvas.winfo_width(), self.px_distance):
+            if x < 0:
+                continue
             self.canvas.create_line(
                 x, 0, x, self.canvas.winfo_height(),
                 fill=self.fill,
@@ -795,7 +797,7 @@ class MainJupiterWindow(Window):
 
     def mouse_scroll_up_handler(self, event=None):
         if self.kmap.get(u'Shift_L', False):
-            self.set_start_label_to(self.start_line_left_padding + 5)
+            self.set_start_label_to(self.start_line_left_padding + 15)
         elif self.kmap.get('Control_L'):
             self.sec_px += 1
             self.bpm_grid.sec_px = self.sec_px
@@ -803,7 +805,7 @@ class MainJupiterWindow(Window):
 
     def mouse_scroll_down_handler(self, event=None):
         if self.kmap.get(u'Shift_L', False):
-            self.set_start_label_to(self.start_line_left_padding - 5)
+            self.set_start_label_to(self.start_line_left_padding - 15)
         elif self.kmap.get('Control_L'):
             self.sec_px -= 1
             # fixme: put this value in a configuration file?
