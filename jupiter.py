@@ -144,6 +144,10 @@ class CanvasButton(draw.RectangleDraw):
         self.text.x = self.x + (self.width / 2)
         self.text.y = self.y + (self.height / 2)
 
+    def delete(self):
+        draw.RectangleDraw.delete(self)
+        self.text.delete()
+
 
 class ToggleCanvasButton(CanvasButton):
     def __init__(self, *args, **kwargs):
@@ -179,6 +183,7 @@ class BPMGrid(object):
         self.fill = kwargs.pop('fill', '#444')
         self.tag = uuid.uuid4().hex
         self.canvas = canvas
+        self.visible = kwargs.pop('visible', True)
 
         self.start_px = start_px
         self.__sec_px = sec_px
@@ -221,6 +226,9 @@ class BPMGrid(object):
 
     def draw(self):
         self.canvas.delete(self.tag)
+        if not self.visible:
+            return
+
         for x in xrange(
                 self.start_px, self.canvas.winfo_width(), self.px_distance):
             if x < 0:
@@ -389,6 +397,16 @@ class SoundFragment(draw.RectangleDraw):
 
         self.update_component()
         self.enable_drag()
+
+    def delete(self):
+        draw.RectangleDraw.delete(self)
+        self.sound_line.delete()
+        self.track_label.delete()
+        self.selected_mark.delete()
+        self.volume_btn.delete()
+        self.mute_btn.delete()
+        self.fill_btn.delete()
+        self.solo_btn.delete()
 
     @property
     def selected(self):
@@ -609,6 +627,7 @@ class MainJupiterWindow(Window):
         self.start_seek = None
 
         self.bind('<space>', self.toggle_play_pause, '+')
+        self.bind('<Delete>', self.delete_fragments, '+')
 
         self.bind('<Up>', self.offset_positive_y_sound_fragments, '+')
         self.bind('<Down>', self.offset_negative_y_sound_fragments, '+')
@@ -729,6 +748,11 @@ class MainJupiterWindow(Window):
         for sound in self.get_selected_sound_fragments():
             sound.y += 5
             sound.update_component()
+
+    def delete_fragments(self, event=None):
+        for sound in self.get_selected_sound_fragments():
+            self.sounds.remove(sound)
+            sound.delete()
 
     def desselect_sound_fragments(self, event=None):
         for sound in self.sounds:
