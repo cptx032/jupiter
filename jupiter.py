@@ -84,6 +84,30 @@ class RenameSoundFragmentDialog(DefaultDialog):
         self.result = self._entry.get()
 
 
+class ChangeBPMDialog(DefaultDialog):
+    def __init__(self, *args, **kwargs):
+        self.bpm = kwargs.pop('bpm', 110)
+        kwargs.update(button_class=DefaultDialogButton)
+        DefaultDialog.__init__(self, *args, **kwargs)
+
+    def body(self, parent):
+        self._entry = Entry(
+            parent,
+            fg='#333',
+            text='BPM',
+            relief='flat',
+            bd=10,
+            insertwidth=1
+        )
+        self._entry.grid(pady=5, padx=5)
+        self._entry.delete(0, 'end')
+        self._entry.insert('0', str(self.bpm))
+        return self._entry
+
+    def apply(self):
+        self.result = self._entry.get()
+
+
 class JupiterAboutWindow(SubWindow):
     def __init__(self, *args, **kwargs):
         SubWindow.__init__(self, *args, **kwargs)
@@ -150,35 +174,60 @@ class ToggleCanvasButton(CanvasButton):
         self.update_colors()
 
 
-class HorizontalGrid(object):
-    def __init__(self, canvas, x, y, width, height, **kwargs):
+class BPMGrid(object):
+    def __init__(self, canvas, sec_px, start_px, bpm, **kwargs):
         self.fill = kwargs.pop('fill', '#444')
-        self.track_spacing = kwargs.pop('track_spacing', 40)
         self.tag = uuid.uuid4().hex
         self.canvas = canvas
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
 
+        self.start_px = start_px
+        self.__sec_px = sec_px
+        self.__bpm = bpm
+        self.px_distance = int(self.sec_px / (self.bpm / 60.0))
+        self.label = draw.TextDraw(
+            self.canvas,
+            20, self.canvas.winfo_height() - 60,
+            font=('TkDefaultFont', 10, 'bold'),
+            anchor='sw', text=u'{} bpms'.format(self.bpm),
+            fill='#999',
+        )
+
+        self.draw()
+
+    def update_px_distance(self):
+        self.px_distance = int(self.sec_px / (self.bpm / 60.0))
+
+    @property
+    def bpm(self):
+        return self.__bpm
+
+    @bpm.setter
+    def bpm(self, value):
+        self.__bpm = value
+        self.label.text = u'{} bpms'.format(self.bpm)
+        self.update_px_distance()
+        self.draw()
+
+    @property
+    def sec_px(self):
+        return self.__sec_px
+
+
+    @sec_px.setter
+    def sec_px(self, value):
+        self.__sec_px = value
+        self.update_px_distance()
         self.draw()
 
     def draw(self):
         self.canvas.delete(self.tag)
-        for y in range(0, self.canvas.winfo_height(), self.track_spacing):
-            self.canvas.create_line(
-                0, y,
-                self.canvas.winfo_width(), y,
-                tags=self.tag,
-                fill=self.fill,
-                dash=(5,)
-            )
-        for x in range(0, self.canvas.winfo_width(), self.track_spacing):
+        for x in xrange(
+                self.start_px, self.canvas.winfo_width(), self.px_distance):
             self.canvas.create_line(
                 x, 0, x, self.canvas.winfo_height(),
                 fill=self.fill,
                 tags=self.tag,
-                dash=(5,)
+                dash=(15,),
             )
 
 
@@ -456,7 +505,7 @@ class MainJupiterWindow(Window):
     def __init__(self):
         Window.__init__(self)
 
-        self.__sec_px = 10
+        self.__sec_px = 20
         self.config(bg='#333')
         self.enable_escape()
         self.enable_kmap()
@@ -470,9 +519,6 @@ class MainJupiterWindow(Window):
             bg=self['bg'])
         self.main_canvas.pack(expand='yes', fill='both')
         self.main_canvas.update_idletasks()
-        self.horizontal_grid = HorizontalGrid(
-            self.main_canvas, 300, 0, self.winfo_width() - 300,
-            self.winfo_height())
         self.bind('<o>', self.open_file, '+')
         self.bind('<Button-4>', self.mouse_scroll_up_handler, '+')
         self.bind('<Button-5>', self.mouse_scroll_down_handler, '+')
@@ -494,10 +540,10 @@ class MainJupiterWindow(Window):
         )
         self.sec_px_label = draw.TextDraw(
             self.main_canvas,
-            self.width - 20,
-            self.height - 20,
-            text=u'{}px'.format(self.sec_px),
-            anchor='se', fill='#999',
+            20,
+            self.height - 40,
+            text=u'{}px/sec'.format(self.sec_px),
+            anchor='sw', fill='#999',
             font=('TkDefaultFont', 10, 'bold')
         )
         self.play_position_label = draw.TextDraw(
@@ -513,7 +559,8 @@ class MainJupiterWindow(Window):
             self.width - 20,
             20, text=u'\n\n'.join([
                 'o - open wav',
-                'b - about',
+                'b - change bpm',
+                't - about',
                 'a - select all',
                 'f2 - rename sound',
                 'space - play/stop',
@@ -564,13 +611,30 @@ class MainJupiterWindow(Window):
         self.bind('<Down>', self.offset_negative_y_sound_fragments, '+')
         self.bind('<a>', self.select_all_sound_fragments, '+')
         self.bind('<F2>', self.rename_selected_sound_fragment, '+')
-        self.bind('<b>', self.show_about, '+')
-        self.bind('<Home>', self.set_cursos_to_start_position, '+')
+        self.bind('<b>', self.change_bpm, '+')
+        self.bind('<t>', self.show_about, '+')
+        self.bind('<Home>', self.set_cursor_to_start_position, '+')
 
         self.sounds = []
         self.main_canvas.focus_force()
 
-    def set_cursos_to_start_position(self, event):
+        self.__bpm = 110
+        self.bpm_grid = BPMGrid(
+            self.main_canvas,
+            self.sec_px, self.start_line_left_padding,
+            self.bpm
+        )
+
+    @property
+    def bpm(self):
+        return self.__bpm
+
+    @bpm.setter
+    def bpm(self, value):
+        self.__bpm = value
+        self.bpm_grid.bpm = self.bpm
+
+    def set_cursor_to_start_position(self, event):
         self.cursor_line.coords = [
             self.start_line_left_padding, 0,
             self.start_line_left_padding, self.height
@@ -597,6 +661,15 @@ class MainJupiterWindow(Window):
         ).result
         if name:
             s_fragment.track_label.text = name
+
+    def change_bpm(self, event=None):
+        bpm = ChangeBPMDialog(
+            self,
+            u'Change BPM',
+            bpm=self.bpm
+        ).result
+        if bpm:
+            self.bpm = int(bpm)
 
     def select_all_sound_fragments(self, event=None):
         if len(self.get_selected_sound_fragments()) == len(self.sounds):
@@ -637,6 +710,7 @@ class MainJupiterWindow(Window):
 
     def update_play_line(self):
         duration = time.time() - self.start_play
+
         x = self.start_line_left_padding + (self.start_seek * self.sec_px)
         x += self.sec_px * duration
         self.play_line.coords = [
@@ -677,7 +751,7 @@ class MainJupiterWindow(Window):
         for sound in self.sounds:
             threading.Timer(0, sound.calculates_sound_lines).start()
             sound.update_component()
-        self.sec_px_label.text = u'{}px'.format(self.sec_px)
+        self.sec_px_label.text = u'{}px/sec'.format(self.sec_px)
 
     def mouse_scroll_up_handler(self, event=None):
         if self.kmap.get(u'Shift_L', False):
@@ -696,6 +770,8 @@ class MainJupiterWindow(Window):
                 i.update_component()
         elif self.kmap.get('Control_L'):
             self.sec_px += 1
+            self.bpm_grid.sec_px = self.sec_px
+            self.bpm_grid.draw()
 
     def mouse_scroll_down_handler(self, event=None):
         if self.kmap.get(u'Shift_L', False):
@@ -720,6 +796,9 @@ class MainJupiterWindow(Window):
             # fixme: put this value in a configuration file?
             if self.sec_px < 5:
                 self.sec_px = 5
+
+            self.bpm_grid.sec_px = self.sec_px
+            self.bpm_grid.draw()
 
     def show_about(self, event=None):
         JupiterAboutWindow(self)
@@ -756,29 +835,12 @@ if __name__ == '__main__':
     PYAUDIO.terminate()
 
 '''
-{
-    "sec_px": 10,
-    "bpm": 110,
-    "sounds": [
-        {
-            "path": "sounds/base01.wav",
-            # color index
-            "color": 0,
-            "mute": false,
-            "solo": false,
-            "start": 0.02
-        }
-    ]
-}
-# o grid no fundo deve ser o metronomo
-# lock fragments
 # save
 # ctrl+c ctrl+v
 # select multiple + move (falta na horizontal)
 # editar samples
 # gravar samples
 # mutar e desmutar por cor
-# ao fechar repentinamento o arquivo, estoura um erro
 # m -> muta tudo que está selecionado
 # ao fechar tela dar um stop em todos os fragments
 # undo/redo
@@ -795,14 +857,10 @@ if __name__ == '__main__':
 # bug audacity, apertar seta cima pra ir pra track de cima
 # mas se apertar Shift + R ele grava na anterior
 # ao solar uma track e apertar shift+r ele toca as que estao mudas
-# apertar F2 e alterar o nome da track
-# Shift + ScrollWheel -> para fazer scroll como o audacity
 # apertar Tab para alternar de uma base para outra
 # permitir alterar o volume de uma parte especifica
 
 # permitir copiar um fragment e as alterações de volume que
 # se fizerem se repete a nao ser que se queira "desconectar"
-
-# o atalho para desmutar tudo nao funciona (Ctrl + Shift + U)
 # psicopato, o pato psicopata
 '''
