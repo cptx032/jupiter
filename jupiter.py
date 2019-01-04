@@ -564,7 +564,8 @@ class MainJupiterWindow(Window):
                 'a - select all',
                 'f2 - rename sound',
                 'space - play/stop',
-                'home - set cursor to start position'
+                'home - set cursor to start position',
+                'end - set cursor to end position'
             ]),
             anchor='ne', fill='#999'
         )
@@ -614,6 +615,7 @@ class MainJupiterWindow(Window):
         self.bind('<b>', self.change_bpm, '+')
         self.bind('<t>', self.show_about, '+')
         self.bind('<Home>', self.set_cursor_to_start_position, '+')
+        self.bind('<End>', self.set_cursor_to_end_position, '+')
 
         self.sounds = []
         self.main_canvas.focus_force()
@@ -634,10 +636,24 @@ class MainJupiterWindow(Window):
         self.__bpm = value
         self.bpm_grid.bpm = self.bpm
 
-    def set_cursor_to_start_position(self, event):
+    def set_cursor_to_start_position(self, event=None):
         self.cursor_line.coords = [
             self.start_line_left_padding, 0,
             self.start_line_left_padding, self.height
+        ]
+
+    def set_cursor_to_end_position(self, event=None):
+        if len(self.sounds) == 0:
+            return
+        seek = self.sounds[0].start + self.sounds[0].sound.duration
+        for sound in self.sounds[1:]:
+            sound_seek = sound.start + sound.sound.duration
+            if sound_seek > seek:
+                seek = sound_seek
+        x = self.start_line_left_padding + (self.sec_px * seek)
+        self.cursor_line.coords = [
+            x, 0,
+            x, self.height
         ]
 
     def set_cursor_position(self, event):
