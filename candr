@@ -1,4 +1,4 @@
 #!/usr/bin/env sh
 rm -rf ./a.out
-g++ c.cpp RtMidi.cpp -lSDL2 -lSDL2_ttf -std=c++11 -lpthread -lasound -pthread -D __LINUX_ALSA__
+g++ c.cpp RtMidi.cpp -lSDL2 -lSDL2_ttf -lSDL2_mixer -std=c++11 -lpthread -lasound -pthread -D __LINUX_ALSA__
 ./a.out
